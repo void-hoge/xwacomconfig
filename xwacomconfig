@@ -85,8 +85,6 @@ class xwacomconfig:
             hscale = ww/tabletaspect/sh
         xtrans = wx/sw
         ytrans = wy/sh
-        affine = self.get_scale_affine(wscale, hscale)
-        affine = self.get_trans_affine(xtrans, ytrans)
         affine = self.affine_prod(self.get_trans_affine(xtrans, ytrans),self.get_scale_affine(wscale, hscale))
         matstr = ''
         for row in affine:

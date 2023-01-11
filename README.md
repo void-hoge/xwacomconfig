@@ -1,5 +1,4 @@
 # XWACOMCONFIG
-
 - xwacomconfig - auto configurator of the Wacom tablet.
 - Map the tablet to fit the clicked window.
 
@@ -8,6 +7,7 @@
 - xsetwacom
 - xdpyinfo
 - xdotool
+- python-xlib
 
 ## USAGE
 - `./xwacomconfig`: non track mode, map the tablet to the clicked window only once
