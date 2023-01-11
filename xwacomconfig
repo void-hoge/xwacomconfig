@@ -1,0 +1,134 @@
+#!/usr/bin/python3
+
+import os
+import sys
+import subprocess
+import re
+import sys
+from Xlib import X, XK, display
+
+class xwacomconfig:
+    def __init__(self):
+        self.tabletname, self.tabletid = self.get_tabletprofile()
+        self.tabletsize = self.get_tabletsize()
+        self.screensize = self.get_screensize()
+        self.windowid = self.get_windowid()
+        self.windowgeom = self.get_windowgeom()
+
+    def initx(self):
+        self.display = display.Display()
+        self.screen = self.display.screen()
+        self.screen.root.change_attributes(event_mask = X.SubstructureNotifyMask)
+
+    def mainloop(self):
+        self.initx()
+        self.configure_tablet()
+        while True:
+            event = self.display.next_event()
+            if event.type == X.ConfigureNotify:
+                self.windowgeom = self.get_windowgeom()
+                self.configure_tablet()
+
+    def get_tabletprofile(self):
+        out = subprocess.check_output(['xsetwacom', '--list', 'devices']).decode()
+        match = re.search(r'(Wacom.+stylus)\s+id:\s+(\d+)', out)
+        if match:
+            return match.group(1), int(match.group(2))
+        else:
+            raise EnvironmentError('Failed to load the Wacom tablet.')
+
+    def get_tabletsize(self):
+        out = subprocess.check_output(['xsetwacom', '--get', self.tabletname, 'Area']).decode()
+        match = re.search(r'\d+\s+\d+\s+(\d+)\s+(\d+)', out)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+        else:
+            raise EnvironmentError('Failed to load the Wacom tablet size.')
+
+    def get_screensize(self):
+        out = subprocess.check_output(['xdpyinfo']).decode()
+        match = re.search(r'dimensions:\s+(\d+)x(\d+)', out)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+        else:
+            raise EnvironmentError('Failed to load the screen size.')
+
+    def get_windowid(self):
+        out = subprocess.check_output(['xdotool', 'selectwindow']).decode()
+        return int(out)
+
+    def get_windowgeom(self):
+        out = subprocess.check_output(['xdotool', 'getwindowgeometry', f'{self.windowid}']).decode()
+        match = re.search('Position:\s+(\d+|-\d+),(\d+|-\d+)', out)
+        if match:
+            x,y = int(match.group(1)), int(match.group(2))
+        else:
+            raise EnvironmentError('Failed to load the window position.')
+        match = re.search('Geometry:\s+(\d+)x(\d+)', out)
+        if match:
+            w,h = int(match.group(1)), int(match.group(2))
+        else:
+            raise EnvironmentError('Failed to load the window size.')
+        return x,y,w,h
+
+    def configure_tablet(self):
+        tw,th = self.tabletsize
+        tabletaspect = tw/th;
+        wx, wy, ww, wh = self.windowgeom
+        windowaspect = ww/wh
+        sw, sh = self.screensize
+        if tabletaspect > windowaspect:
+            hscale = wh/sh
+            wscale = wh*tabletaspect/sw
+        else:
+            wscale = ww/sw
+            hscale = ww/tabletaspect/sh
+        xtrans = wx/sw
+        ytrans = wy/sh
+        affine = self.get_scale_affine(wscale, hscale)
+        affine = self.get_trans_affine(xtrans, ytrans)
+        affine = self.affine_prod(self.get_trans_affine(xtrans, ytrans),self.get_scale_affine(wscale, hscale))
+        matstr = ''
+        for row in affine:
+            for num in row:
+                matstr += f'{num} '
+        os.system(f'xinput set-prop {self.tabletid} "Coordinate Transformation Matrix" {matstr}')
+
+    def get_trans_affine(self, x, y):
+        return [
+            [1.0, 0.0, x],
+            [0.0, 1.0, y],
+            [0.0, 0.0, 1.0]
+        ]
+
+    def get_scale_affine(self, w, h):
+        return [
+            [w,   0.0, 0.0],
+            [0.0, h,   0.0],
+            [0.0, 0.0, 1.0]
+        ]
+
+    def affine_prod(self, a, b):
+        result = [
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0]
+        ]
+        for i in range(3):
+            for j in range(3):
+                for k in range(3):
+                    result[i][j] += a[i][k]*b[k][j]
+        return result
+
+def main():
+    handler = xwacomconfig()
+    try:
+        if sys.argv[1] == 'track':
+            handler.mainloop()
+        return
+    except IndexError:
+        pass
+    handler.configure_tablet()
+
+if __name__ == '__main__':
+    main()
